@@ -92,8 +92,7 @@ class CelebAAttributeDataset(Dataset):
 # -----------------------------------------------------------------------------
 # 2. 主函数 (封装所有逻辑)
 # -----------------------------------------------------------------------------
-def get_celeba_dataloaders(
-    root_dir: str, 
+def create_dataloader(
     batch_size: int, 
     selected_attrs: List[str], 
     img_size: int = 224, 
@@ -112,6 +111,17 @@ def get_celeba_dataloaders(
     Returns:
         tuple: 一个包含 (train_dataloader, test_dataloader, attribute_names) 的元组。
     """
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__)) 
+
+    # 基于脚本目录，安全地拼接出 CelebA 文件夹的绝对路径
+    # 结果: /root/ViTEmbedding/dataset/CelebA
+    root_dir = os.path.join(SCRIPT_DIR, 'dataset', 'CelebA')
+    selected_attrs = [
+        'Bangs', 
+        'Eyeglasses', 
+        'Goatee', 
+        'Mustache',
+    ]
     # 定义图像预处理流程
     image_transforms = transforms.Compose([
         transforms.Resize((img_size, img_size)),
@@ -164,18 +174,19 @@ def get_celeba_dataloaders(
 # 3. 使用示例
 # -----------------------------------------------------------------------------
 if __name__ == '__main__':
-    # --- 配置 ---
-    # !!! 修改为你自己的CelebA根目录 !!!
-    CELEBA_ROOT = './CelebA'  
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__)) 
+
+    # 基于脚本目录，安全地拼接出 CelebA 文件夹的绝对路径
+    # 结果: /root/ViTEmbedding/dataset/CelebA
+    CELEBA_ROOT = os.path.join(SCRIPT_DIR, 'dataset', 'CelebA')
     BATCH_SIZE = 64
     
     # 选择你感兴趣的属性，可以直接使用名称
     ATTRIBUTES_TO_SELECT = [
-        'Smiling', 
-        'Male', 
-        'Young', 
-        'Wearing_Hat',
-        'Heavy_Makeup'
+        'Bangs', 
+        'Eyeglasses', 
+        'Goatee', 
+        'Mustache',
     ]
     
     # --- 调用函数获取Dataloaders ---
@@ -196,7 +207,7 @@ if __name__ == '__main__':
         print(f"属性标签批次 (y) 的形状: {y_batch.shape}")
         
         print("\n选取的属性顺序为:", attr_names)
-        print(f"第一个样本的属性 (y[0]): {y_batch[0]}")
+        print(f"第一个样本的属性 (y[0]): {y_batch[9]}")
         
     except FileNotFoundError:
         print(f"\n!!! 错误: 找不到数据集文件。请确保'{CELEBA_ROOT}'路径正确，")
