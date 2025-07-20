@@ -151,7 +151,7 @@ class ViT(nn.Module):
                  attn_dropout:float=0, # Dropout for attention projection
                  mlp_dropout:float=0.1, # Dropout for dense/MLP layers
                  embedding_dropout:float=0.1, # Dropout for patch and position embeddings
-                 num_classes:int=1000): # Default for ImageNet but can customize this
+                 ): # Default for ImageNet but can customize this
         super().__init__() # don't forget the super().__init__()!
 
         # 3. Make the image size is divisble by the patch size
@@ -183,13 +183,6 @@ class ViT(nn.Module):
                                                                             mlp_size=mlp_size,
                                                                             mlp_dropout=mlp_dropout) for _ in range(num_transformer_layers)])
 
-        # 10. Create classifier head
-        self.classifier = nn.Sequential(
-            nn.LayerNorm(normalized_shape=embedding_dim),
-            nn.Linear(in_features=embedding_dim,
-                      out_features=num_classes)
-        )
-
     # 11. Create a forward() method
     def forward(self, x):
 
@@ -214,7 +207,4 @@ class ViT(nn.Module):
         # 18. Pass patch, position and class embedding through transformer encoder layers (equations 2 & 3)
         x = self.transformer_encoder(x)
 
-        # 19. Put 0 index logit through classifier (equation 4)
-        x = self.classifier(x[:, 0]) # run on each sample in a batch at 0 index
-
-        return x
+        return x[: , 0]

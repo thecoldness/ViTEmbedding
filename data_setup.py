@@ -94,7 +94,6 @@ class CelebAAttributeDataset(Dataset):
 # -----------------------------------------------------------------------------
 def create_dataloader(
     batch_size: int, 
-    selected_attrs: List[str], 
     img_size: int = 224, 
     num_workers: int = 4
 ):
@@ -191,7 +190,7 @@ if __name__ == '__main__':
     
     # --- 调用函数获取Dataloaders ---
     try:
-        train_loader, test_loader, attr_names = get_celeba_dataloaders(
+        train_loader, test_loader, attr_names = create_dataloader(
             root_dir=CELEBA_ROOT,
             batch_size=BATCH_SIZE,
             selected_attrs=ATTRIBUTES_TO_SELECT
