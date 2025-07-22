@@ -11,7 +11,7 @@ def train_step(model: torch.nn.Module,
                dataloader: torch.utils.data.DataLoader,
                loss_fn: torch.nn.Module,
                optimizer: torch.optim.Optimizer,
-               device: torch.device) -> Tuple[float, float]:
+               device: torch.device):
     """Trains a PyTorch model for a single epoch.
 
     Turns a target PyTorch model to training mode and then
@@ -35,7 +35,7 @@ def train_step(model: torch.nn.Module,
     model.train()
 
     # Setup train loss and train accuracy values
-    train_loss, train_acc = 0, 0
+    train_loss, train_recall, train_precision, train_F1Score = 0, 0, 0, 0
 
     # Loop through data loader data batches
     for batch, (X, y) in enumerate(dataloader):
@@ -46,7 +46,7 @@ def train_step(model: torch.nn.Module,
         y_pred = model(X)
 
         # 2. Calculate  and accumulate loss
-        loss = loss_fn(y_pred, y)
+        loss, TP , FP ,FN = loss_fn(y_pred, y)
         train_loss += loss.item()
 
         # 3. Optimizer zero grad
@@ -59,19 +59,28 @@ def train_step(model: torch.nn.Module,
         optimizer.step()
 
         # Calculate and accumulate accuracy metric across all batches
-        y_pred_class = torch.argmax(torch.softmax(y_pred, dim=1), dim=1)
-        train_acc += (y_pred_class == y).sum().item() / len(y_pred)
+        precision = TP / (TP + FP)
+        recall = TP / (TP + FN)
+        train_precision += precision.mean().item()
+        train_recall += recall.mean().item()
+        train_F1Score += (2 * (precision + recall) / (precision + recall)).mean().item()
+
+
 
     # Adjust metrics to get average loss and accuracy per batch
     train_loss = train_loss / len(dataloader)
-    train_acc = train_acc / len(dataloader)
-    return train_loss, train_acc
+    train_precision = train_precision / len(dataloader)
+    train_recall = train_recall / len(dataloader)
+    train_F1Score = train_F1Score / len(dataloader)
+
+
+    return train_loss, train_precision , train_recall , train_F1Score
 
 
 def test_step(model: torch.nn.Module,
               dataloader: torch.utils.data.DataLoader,
               loss_fn: torch.nn.Module,
-              device: torch.device) -> Tuple[float, float]:
+              device: torch.device):
     """Tests a PyTorch model for a single epoch.
 
     Turns a target PyTorch model to "eval" mode and then performs
@@ -93,7 +102,7 @@ def test_step(model: torch.nn.Module,
     model.eval()
 
     # Setup test loss and test accuracy values
-    test_loss, test_acc = 0, 0
+    test_loss, test_precision, test_recall, test_F1Score = 0, 0, 0 , 0
 
     # Turn on inference context manager
     with torch.inference_mode():
@@ -106,17 +115,26 @@ def test_step(model: torch.nn.Module,
             test_pred_logits = model(X)
 
             # 2. Calculate and accumulate loss
-            loss = loss_fn(test_pred_logits, y)
+            loss, TP , FP , FN = loss_fn(test_pred_logits, y)
             test_loss += loss.item()
 
             # Calculate and accumulate accuracy
-            test_pred_labels = test_pred_logits.argmax(dim=1)
-            test_acc += ((test_pred_labels == y).sum().item() / len(test_pred_labels))
+        # Calculate and accumulate accuracy metric across all batches
+            precision = TP / (TP + FP)
+            recall = TP / (TP + FN)
+            test_precision += precision.mean().item()
+            test_recall += recall.mean().item()
+            test_F1Score += (2 * (precision + recall) / (precision + recall)).mean().item()
 
-    # Adjust metrics to get average loss and accuracy per batch
-    test_loss = test_loss / len(dataloader)
-    test_acc = test_acc / len(dataloader)
-    return test_loss, test_acc
+
+
+        # Adjust metrics to get average loss and accuracy per batch
+        test_loss = test_loss / len(dataloader)
+        test_precision = test_precision / len(dataloader)
+        test_recall = test_recall / len(dataloader)
+        test_F1Score = test_F1Score / len(dataloader)
+
+        return test_loss, test_precision , test_recall , test_F1Score
 
 
 def train(model: torch.nn.Module,
@@ -159,40 +177,50 @@ def train(model: torch.nn.Module,
     """
     # Create empty results dictionary
     results = {"train_loss": [],
-               "train_acc": [],
+               "train_precision": [],
+               "train_recall" : [],
+               "train_F1Score" : [],
                "test_loss": [],
-               "test_acc": []
+               "test_precision": [],
+               "test_recall":[],
+               "test_F1Score":[]
                }
-
     # Make sure model on target device
     model.to(device)
 
     # Loop through training and testing steps for a number of epochs
     for epoch in tqdm(range(epochs)):
-        train_loss, train_acc = train_step(model=model,
-                                           dataloader=train_dataloader,
-                                           loss_fn=loss_fn,
-                                           optimizer=optimizer,
-                                           device=device)
-        test_loss, test_acc = test_step(model=model,
-                                        dataloader=test_dataloader,
-                                        loss_fn=loss_fn,
-                                        device=device)
-
+        train_loss, train_precision, train_recall, train_F1Score = train_step(model=model,
+                                                                              dataloader=train_dataloader,
+                                                                              loss_fn=loss_fn,
+                                                                              optimizer=optimizer,
+                                                                              device=device)
+        test_loss, test_precision, test_recall, test_F1Score = test_step(model=model,
+                                                                           dataloader=test_dataloader,
+                                                                           loss_fn=loss_fn,
+                                                                           device=device)
         # Print out what's happening
         print(
             f"Epoch: {epoch + 1} | "
             f"train_loss: {train_loss:.4f} | "
-            f"train_acc: {train_acc:.4f} | "
+            f"train_precision: {train_precision:.4f} | "
+            f"train_recall: {train_recall:.4f} | "
+            f"train_F1Score: {train_F1Score:.4f} | "
             f"test_loss: {test_loss:.4f} | "
-            f"test_acc: {test_acc:.4f}"
+            f"test_precision: {test_precision:.4f} | "
+            f"train_recall: {test_recall:.4f} | "
+            f"train_F1Score: {test_F1Score:.4f} | "
         )
 
         # Update results dictionary
         results["train_loss"].append(train_loss)
-        results["train_acc"].append(train_acc)
+        results["train_precision"].append(train_precision)
+        results["train_recall"].append(train_recall)
+        results["train_F1Score"].append(train_F1Score)
         results["test_loss"].append(test_loss)
-        results["test_acc"].append(test_acc)
+        results["test_precision"].append(test_precision)
+        results["test_recall"].append(test_recall)
+        results["test_F1Score"].append(test_F1Score)
 
     # Return the filled results at the end of the epochs
     return results

@@ -22,23 +22,10 @@ def generate_orthogonal_vectors(num_vectors: int=4, dimension: int=768):
         numpy.ndarray: 一个形状为 (num_vectors, dimension) 的数组，
                        每一行是一个标准正交向量（长度为1）。
     """
-    if num_vectors > dimension:
-        raise ValueError(
-            f"无法在 {dimension} 维空间中找到 {num_vectors} 个相互正交的向量。"
-            f"向量的数量必须小于或等于其维度。"
-        )
 
-    # 1. 创建一个随机的 (dimension x num_vectors) 矩阵。
-    # 使用 np.random.randn 从标准正态分布中采样，这在数学上性质更好。
     random_matrix = np.random.randn(dimension, num_vectors)
 
-    # 2. 对这个矩阵进行QR分解。
-    # np.linalg.qr 返回一个元组 (Q, R)。我们只需要正交矩阵 Q。
     q_matrix, _ = np.linalg.qr(random_matrix)
-
-    # q_matrix 的形状是 (dimension, num_vectors)，其列向量是标准正交的。
-    # 为了方便使用，我们将其转置，使得每个向量成为一个行向量。
-    # 最终返回的数组形状为 (num_vectors, dimension)。
     orthogonal_vectors = q_matrix.T
 
     return orthogonal_vectors
@@ -51,48 +38,60 @@ vector = torch.tensor(vector)
 vector = vector.cuda()
 print(f"vector.shape{vector.shape}")
 
-def Closs(y_pred: torch.Tensor, y: torch.Tensor):
+def Closs(
+    y_pred: torch.Tensor, 
+    y: torch.Tensor, 
+    vectors : torch.Tensor = vector,
+    margin: float = 0.5
+):
     """
-    自定义的对比损失函数。
+    自定义的对比损失函数，同时返回TP, FP, FN统计值。
 
     Args:
-        y_pred (torch.Tensor): 模型的输出嵌入，形状为 (batch_size, embedding_dim)。
-        y (torch.Tensor): 属性标签，形状为 (batch_size, num_attributes)，值为0或1。
-        vectors (torch.Tensor): 正交的原型向量，形状为 (num_attributes, embedding_dim)。
+        y_pred (torch.Tensor): 模型的输出嵌入，形状为 (B, D)。
+        y (torch.Tensor): 属性标签，形状为 (B, N)，值为0或1。
+        vectors (torch.Tensor): 正交的原型向量，形状为 (N, D)。
+        margin (float): 用于判断正负样本的余弦相似度阈值。
 
     Returns:
-        torch.Tensor: 计算出的标量损失值。
+        tuple: 一个元组 (loss, tp, fp, fn)，包含标量损失和统计计数值。
     """
-    # 确保输入在同一个设备上
+    # --- 损失计算部分 (与之前保持不变) ---
     device = y_pred.device
     y = y.to(device)
+    vectors = vectors.to(device)
 
-    # 1. 计算 y_pred 中每个向量与所有原型向量的余弦相似度
-    # y_pred: (B, D) -> (B, 1, D)
-    # vectors: (N, D) -> (1, N, D)
-    # F.cosine_similarity 计算后，得到 (B, N) 的相似度矩阵
-    # B = batch_size, D = dimension (768), N = num_attributes (4)
-    similarities = F.cosine_similarity(y_pred.unsqueeze(1), vector.unsqueeze(0), dim=2)
+    # 1. 计算余弦相似度矩阵
+    # B = batch_size, D = dimension, N = num_attributes
+    similarities = F.cosine_similarity(y_pred.unsqueeze(1), vectors.unsqueeze(0), dim=2) # Shape: (B, N)
 
-    # 2. 计算正样本对的损失
-    # 当 y == 1 时，我们希望 similarity -> 1。损失为 1 - similarity。
-    # 我们用 y 作为掩码，只在 y==1 的位置计算损失。
+    # 2. 计算损失
     positive_loss = (1 - similarities) * y
-
-    # 3. 计算负样本对的损失
-    # 当 y == 0 时，我们希望 similarity -> 0 或负数。损失为 max(0, similarity)。
-    # 我们用 (1 - y) 作为掩码，只在 y==0 的位置计算损失。
     negative_loss = F.relu(similarities) * (1 - y)
-
-    # 4. 合并总损失
-    # 将正负样本的损失相加，得到每个样本-属性对的损失矩阵
     total_loss_matrix = positive_loss + negative_loss
-
-    # 5. 计算整个批次的平均损失
-    # .mean() 会计算所有元素 (B * N) 的平均值
     loss = total_loss_matrix.mean()
 
-    return loss
+    # --- 新增：TP, FP, FN 统计部分 ---
+
+    # 3. 根据 margin 生成预测标签
+    # 如果 similarity >= margin，则预测为1，否则为0
+    predicted_labels = (similarities >= margin).float() # Shape: (B, N)
+
+    # 4. 计算统计指标
+    # 使用布尔运算和 .sum() 来高效地计数
+    # TP: 预测为1且真实为1
+    tp = ((predicted_labels == 1) & (y == 1)).sum(dim=1)
+    
+    # FP: 预测为1但真实为0
+    fp = ((predicted_labels == 1) & (y == 0)).sum(dim=1)
+    
+    # FN: 预测为0但真实为1
+    fn = ((predicted_labels == 0) & (y == 1)).sum(dim=1)
+    
+    # (可选) TN: 预测为0且真实为0
+    # tn = ((predicted_labels == 0) & (y == 0)).sum().item()
+
+    return loss, tp, fp, fn
 
 train_dataloader , test_dataloader , _ = create_dataloader(batch_size = 64)
 
@@ -101,8 +100,9 @@ model = ViT()
 model = model.cuda()
 optimizer = optim.Adam(model.parameters() , lr = lr)
 
-train(model=model, loss_fn = Closs,
-      train_dataloader=train_dataloader , test_dataloader=test_dataloader,
-      optimizer = optimizer,
-      epochs = epochs,
-      device = torch.device('cuda:0'))
+results = train(model=model, loss_fn = Closs,
+                train_dataloader=train_dataloader , test_dataloader=test_dataloader,
+                optimizer = optimizer,
+                epochs = epochs,
+                device = torch.device('cuda:0'))
+
