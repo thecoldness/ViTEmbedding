@@ -5,9 +5,6 @@ from torchvision import transforms
 from PIL import Image
 from typing import List
 
-# -----------------------------------------------------------------------------
-# 1. 自定义数据集类 (处理底层数据加载)
-# -----------------------------------------------------------------------------
 class CelebAAttributeDataset(Dataset):
     """
     自定义CelebA属性数据集。
@@ -54,8 +51,9 @@ class CelebAAttributeDataset(Dataset):
             if filename == p_filename and int(p_code) == self.selected_partition_code:
                 # 将属性从 '-1'/'1' 转换为 0/1
                 attrs_01 = [(int(v) + 1) // 2 for v in parts[1:]]
-                self.samples.append((filename, torch.tensor(attrs_01, dtype=torch.float32)))
-        
+                if sum(attrs_01) > 0:
+                    self.samples.append((filename, torch.tensor(attrs_01, dtype=torch.float32)))
+
         # 如果指定了要选择的属性，则进行筛选
         if selected_attrs:
             try:
@@ -89,9 +87,6 @@ class CelebAAttributeDataset(Dataset):
             
         return x, y
 
-# -----------------------------------------------------------------------------
-# 2. 主函数 (封装所有逻辑)
-# -----------------------------------------------------------------------------
 def create_dataloader(
     batch_size: int, 
     img_size: int = 224, 
@@ -112,8 +107,6 @@ def create_dataloader(
     """
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__)) 
 
-    # 基于脚本目录，安全地拼接出 CelebA 文件夹的绝对路径
-    # 结果: /root/ViTEmbedding/dataset/CelebA
     root_dir = os.path.join(SCRIPT_DIR, 'dataset', 'CelebA')
     selected_attrs = [
         'Bangs', 
@@ -168,48 +161,3 @@ def create_dataloader(
     print(f"选取的属性: {train_dataset.selected_attribute_names}")
     
     return train_dataloader, test_dataloader, train_dataset.selected_attribute_names
-
-# -----------------------------------------------------------------------------
-# 3. 使用示例
-# -----------------------------------------------------------------------------
-if __name__ == '__main__':
-    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__)) 
-
-    # 基于脚本目录，安全地拼接出 CelebA 文件夹的绝对路径
-    # 结果: /root/ViTEmbedding/dataset/CelebA
-    CELEBA_ROOT = os.path.join(SCRIPT_DIR, 'dataset', 'CelebA')
-    BATCH_SIZE = 64
-    
-    # 选择你感兴趣的属性，可以直接使用名称
-    ATTRIBUTES_TO_SELECT = [
-        'Bangs', 
-        'Eyeglasses', 
-        'Goatee', 
-        'Mustache',
-    ]
-    
-    # --- 调用函数获取Dataloaders ---
-    try:
-        train_loader, test_loader, attr_names = create_dataloader(
-            root_dir=CELEBA_ROOT,
-            batch_size=BATCH_SIZE,
-            selected_attrs=ATTRIBUTES_TO_SELECT
-        )
-        
-        # --- 演示如何使用返回的DataLoader ---
-        print("\n--- 演示从 train_loader 中取出一个批次 ---")
-        
-        # x是图片, y是属性
-        x_batch, y_batch = next(iter(train_loader))
-        
-        print(f"图片批次 (x) 的形状: {x_batch.shape}")
-        print(f"属性标签批次 (y) 的形状: {y_batch.shape}")
-        
-        print("\n选取的属性顺序为:", attr_names)
-        print(f"第一个样本的属性 (y[0]): {y_batch[9]}")
-        
-    except FileNotFoundError:
-        print(f"\n!!! 错误: 找不到数据集文件。请确保'{CELEBA_ROOT}'路径正确，")
-        print("并且该路径下包含 'Anno', 'Eval', 'Img' 三个文件夹。")
-    except ValueError as e:
-        print(f"\n!!! 错误: {e}")
