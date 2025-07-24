@@ -8,7 +8,7 @@ ViTEmbedding: 基于对比学习和 ViT 的多属性预测模型
 ```
 conda env create -f environment.yml
 ```
-运行
+运行（请先下载 CelebA 数据集）
 ```
 cd ViTEmbedding
 python run.py
