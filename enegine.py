@@ -1,6 +1,4 @@
-"""
-Contains functions for training and testing a PyTorch model.
-"""
+
 import torch
 
 from tqdm.auto import tqdm
@@ -31,34 +29,24 @@ def train_step(model: torch.nn.Module,
 
     (0.1112, 0.8743)
     """
-    # Put model in train mode
     model.train()
 
-    # Setup train loss and train accuracy values
     train_loss, train_recall, train_precision, train_F1Score = 0, 0, 0, 0
 
-    # Loop through data loader data batches
     for batch, (X, y) in enumerate(dataloader):
-        # Send data to target device
         X, y = X.to(device), y.to(device)
 
-        # 1. Forward pass
         y_pred = model(X)
 
-        # 2. Calculate  and accumulate loss
         loss, TP , FP ,FN = loss_fn(y_pred, y)
         train_loss += loss.item()
 
-        # 3. Optimizer zero grad
         optimizer.zero_grad()
 
-        # 4. Loss backward
         loss.backward()
 
-        # 5. Optimizer step
         optimizer.step()
 
-        # Calculate and accumulate accuracy metric across all batches
         precision = TP / (TP + FP)
         recall = TP / (TP + FN)
         train_precision += precision.mean().item()
@@ -66,8 +54,6 @@ def train_step(model: torch.nn.Module,
         train_F1Score += (2 * (precision + recall) / (precision + recall)).mean().item()
 
 
-
-    # Adjust metrics to get average loss and accuracy per batch
     train_loss = train_loss / len(dataloader)
     train_precision = train_precision / len(dataloader)
     train_recall = train_recall / len(dataloader)
@@ -98,28 +84,19 @@ def test_step(model: torch.nn.Module,
 
     (0.0223, 0.8985)
     """
-    # Put model in eval mode
     model.eval()
 
-    # Setup test loss and test accuracy values
     test_loss, test_precision, test_recall, test_F1Score = 0, 0, 0 , 0
 
-    # Turn on inference context manager
     with torch.inference_mode():
-        # Loop through DataLoader batches
         for batch, (X, y) in enumerate(dataloader):
-            # Send data to target device
             X, y = X.to(device), y.to(device)
 
-            # 1. Forward pass
             test_pred_logits = model(X)
 
-            # 2. Calculate and accumulate loss
             loss, TP , FP , FN = loss_fn(test_pred_logits, y)
             test_loss += loss.item()
 
-            # Calculate and accumulate accuracy
-        # Calculate and accumulate accuracy metric across all batches
             precision = TP / (TP + FP)
             recall = TP / (TP + FN)
             test_precision += precision.mean().item()
@@ -128,7 +105,6 @@ def test_step(model: torch.nn.Module,
 
 
 
-        # Adjust metrics to get average loss and accuracy per batch
         test_loss = test_loss / len(dataloader)
         test_precision = test_precision / len(dataloader)
         test_recall = test_recall / len(dataloader)
@@ -175,7 +151,6 @@ def train(model: torch.nn.Module,
               test_loss: [1.2641, 1.5706],
               test_acc: [0.3400, 0.2973]}
     """
-    # Create empty results dictionary
     results = {"train_loss": [],
                "train_precision": [],
                "train_recall" : [],
@@ -185,10 +160,8 @@ def train(model: torch.nn.Module,
                "test_recall":[],
                "test_F1Score":[]
                }
-    # Make sure model on target device
     model.to(device)
 
-    # Loop through training and testing steps for a number of epochs
     for epoch in tqdm(range(epochs)):
         train_loss, train_precision, train_recall, train_F1Score = train_step(model=model,
                                                                               dataloader=train_dataloader,
@@ -198,8 +171,7 @@ def train(model: torch.nn.Module,
         test_loss, test_precision, test_recall, test_F1Score = test_step(model=model,
                                                                            dataloader=test_dataloader,
                                                                            loss_fn=loss_fn,
-                                                                           device=device)
-        # Print out what's happening
+                                         
         print(
             f"Epoch: {epoch + 1} | "
             f"train_loss: {train_loss:.4f} | "
@@ -212,7 +184,6 @@ def train(model: torch.nn.Module,
             f"train_F1Score: {test_F1Score:.4f} | "
         )
 
-        # Update results dictionary
         results["train_loss"].append(train_loss)
         results["train_precision"].append(train_precision)
         results["train_recall"].append(train_recall)
@@ -222,5 +193,4 @@ def train(model: torch.nn.Module,
         results["test_recall"].append(test_recall)
         results["test_F1Score"].append(test_F1Score)
 
-    # Return the filled results at the end of the epochs
     return results
